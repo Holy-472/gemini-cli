@@ -1590,28 +1590,42 @@ describe('InputPrompt', () => {
       unmount();
     });
 
-    it('resets reverse search state on Escape', async () => {
-      const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-      );
+    it.each([
+      { name: 'standard', kittyProtocolEnabled: false, escapeSequence: '\x1B' },
+      {
+        name: 'kitty',
+        kittyProtocolEnabled: true,
+        escapeSequence: '\u001b[27u',
+      },
+    ])(
+      'resets reverse search state on Escape ($name)',
+      async ({ kittyProtocolEnabled, escapeSequence }) => {
+        const { stdin, stdout, unmount } = renderWithProviders(
+          <InputPrompt {...props} />,
+          { kittyProtocolEnabled },
+        );
 
-      await act(async () => {
-        stdin.write('\x12');
-      });
-      await act(async () => {
-        stdin.write('\x1B');
-      });
-      await act(async () => {
-        stdin.write('\u001b[27u'); // Press kitty escape key
-      });
+        await act(async () => {
+          stdin.write('\x12');
+        });
 
-      await waitFor(() => {
-        expect(stdout.lastFrame()).not.toContain('(r:)');
-        expect(stdout.lastFrame()).not.toContain('echo hello');
-      });
+        // Wait for reverse search to be active
+        await waitFor(() => {
+          expect(stdout.lastFrame()).toContain('(r:)');
+        });
 
-      unmount();
-    });
+        await act(async () => {
+          stdin.write(escapeSequence);
+        });
+
+        await waitFor(() => {
+          expect(stdout.lastFrame()).not.toContain('(r:)');
+          expect(stdout.lastFrame()).not.toContain('echo hello');
+        });
+
+        unmount();
+      },
+    );
 
     it('completes the highlighted entry on Tab and exits reverse-search', async () => {
       // Mock the reverse search completion
